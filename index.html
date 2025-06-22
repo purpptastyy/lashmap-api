@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>LashMap API Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    input, button {
+      margin: 1rem 0;
+      padding: 0.5rem;
+    }
+    #response {
+      white-space: pre-wrap;
+      background: #222;
+      padding: 1rem;
+      border-radius: 5px;
+      width: 100%;
+      max-width: 600px;
+    }
+  </style>
+</head>
+<body>
+  <h1>LashMap API Tester</h1>
+  <input type="file" id="imageInput" accept="image/*">
+  <button onclick="uploadImage()">Bild analysieren</button>
+  <div id="response"></div>
+
+  <script>
+    async function uploadImage() {
+      const fileInput = document.getElementById("imageInput");
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Bitte ein Bild auswählen.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const responseElement = document.getElementById("response");
+      responseElement.textContent = "⏳ Anfrage wird gesendet...";
+
+      try {
+        const res = await fetch("http://127.0.0.1:8000/analyze-eye", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await res.json();
+        responseElement.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        responseElement.textContent = "❌ Fehler bei der Anfrage:\n" + error;
+      }
+    }
+  </script>
+</body>
+</html>
