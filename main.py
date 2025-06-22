@@ -3,12 +3,11 @@ from fastapi.responses import JSONResponse
 import cv2
 import numpy as np
 import mediapipe as mp
-from rules import determine_eye_shape, get_mapping_recommendation
+from rules import determine_eye_shape, get_mapping_recommendation, get_combined_recommendation
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# CORS aktivieren für Browsertests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,27 +17,24 @@ app.add_middleware(
 )
 
 # Hilfsfunktion zur Berechnung von Merkmalen
-def get_eye_features(landmarks):
-    # Landmark-IDs für rechtes Auge (MediaPipe)
-    left_top = landmarks[159]
-    left_bottom = landmarks[145]
-    left_inner = landmarks[133]
-    left_outer = landmarks[33]
+def get_eye_features(landmarks, side="left"):
+    if side == "left":
+        top = landmarks[159]
+        bottom = landmarks[145]
+        inner = landmarks[133]
+        outer = landmarks[33]
+    else:  # right eye
+        top = landmarks[386]
+        bottom = landmarks[374]
+        inner = landmarks[362]
+        outer = landmarks[263]
 
-    # Höhe und Breite berechnen
-    eye_height = abs(left_top.y - left_bottom.y)
-    eye_width = abs(left_outer.x - left_inner.x)
+    eye_height = abs(top.y - bottom.y)
+    eye_width = abs(outer.x - inner.x)
     open_ratio = eye_height / eye_width if eye_width != 0 else 0
+    tilt_angle = outer.y - inner.y
 
-    # Neigung berechnen (vertikaler Unterschied der X-Achse)
-    tilt_angle = left_outer.y - left_inner.y
-
-    return open_ratio, tilt_angle, {
-        "left_top": (left_top.x, left_top.y),
-        "left_bottom": (left_bottom.x, left_bottom.y),
-        "left_inner": (left_inner.x, left_inner.y),
-        "left_outer": (left_outer.x, left_outer.y),
-    }
+    return open_ratio, tilt_angle
 
 @app.post("/analyze-eye")
 async def analyze_eye(image: UploadFile = File(...)):
@@ -47,7 +43,6 @@ async def analyze_eye(image: UploadFile = File(...)):
         npimg = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-        # MediaPipe Setup
         mp_face_mesh = mp.solutions.face_mesh
         with mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1) as face_mesh:
             results = face_mesh.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
@@ -56,7 +51,7 @@ async def analyze_eye(image: UploadFile = File(...)):
                 return JSONResponse(status_code=400, content={"error": "No face detected"})
 
             landmarks = results.multi_face_landmarks[0].landmark
-            open_ratio, tilt_angle, landmark_debug = get_eye_features(landmarks)
+            open_ratio, tilt_angle = get_eye_features(landmarks)
 
             eye_shape = determine_eye_shape(open_ratio, tilt_angle)
             recommendation = get_mapping_recommendation(eye_shape)
@@ -65,8 +60,43 @@ async def analyze_eye(image: UploadFile = File(...)):
                 "eye_shape": eye_shape,
                 "open_ratio": round(open_ratio, 4),
                 "tilt_angle": round(tilt_angle, 4),
-                "landmark_points": landmark_debug,
                 **recommendation
+            }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/analyze-both-eyes")
+async def analyze_both_eyes(image: UploadFile = File(...)):
+    try:
+        contents = await image.read()
+        npimg = np.frombuffer(contents, np.uint8)
+        img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+        mp_face_mesh = mp.solutions.face_mesh
+        with mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1) as face_mesh:
+            results = face_mesh.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+
+            if not results.multi_face_landmarks:
+                return JSONResponse(status_code=400, content={"error": "No face detected"})
+
+            landmarks = results.multi_face_landmarks[0].landmark
+
+            left_open, left_tilt = get_eye_features(landmarks, side="left")
+            right_open, right_tilt = get_eye_features(landmarks, side="right")
+
+            left_shape = determine_eye_shape(left_open, left_tilt)
+            right_shape = determine_eye_shape(right_open, right_tilt)
+
+            full_recommendation = get_combined_recommendation(left_shape, right_shape)
+
+            return {
+                "left_eye_shape": left_shape,
+                "right_eye_shape": right_shape,
+                "left_open_ratio": round(left_open, 4),
+                "right_open_ratio": round(right_open, 4),
+                "left_tilt_angle": round(left_tilt, 4),
+                "right_tilt_angle": round(right_tilt, 4),
+                **full_recommendation
             }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
