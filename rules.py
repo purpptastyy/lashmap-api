@@ -61,3 +61,16 @@ def get_mapping_recommendation(eye_shape):
         "notes": "Keine spezifische Empfehlung gefunden"
     })
 
+
+def get_combined_recommendation(left_shape, right_shape):
+    """Return recommendations for both eyes."""
+    left_rec = get_mapping_recommendation(left_shape)
+    right_rec = get_mapping_recommendation(right_shape)
+
+    if left_shape == right_shape:
+        return left_rec
+
+    return {
+        "left_eye_recommendation": left_rec,
+        "right_eye_recommendation": right_rec,
+    }
