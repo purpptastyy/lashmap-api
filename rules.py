@@ -61,3 +61,18 @@ def get_mapping_recommendation(eye_shape):
         "notes": "Keine spezifische Empfehlung gefunden"
     })
 
+
+
+def get_combined_recommendation(left_shape, right_shape):
+    """Merge recommendations for two eye shapes."""
+    left_rec = get_mapping_recommendation(left_shape)
+    right_rec = get_mapping_recommendation(right_shape)
+    if left_shape == right_shape:
+        return left_rec
+    return {
+        "style": f"{left_rec['style']} / {right_rec['style']}",
+        "mapping": f"Left: {left_rec['mapping']}, Right: {right_rec['mapping']}",
+        "curl": f"{left_rec['curl']} / {right_rec['curl']}",
+        "length": f"Left: {left_rec['length']}, Right: {right_rec['length']}",
+        "notes": f"Left: {left_rec['notes']} | Right: {right_rec['notes']}",
+    }
